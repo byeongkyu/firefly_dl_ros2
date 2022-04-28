@@ -52,7 +52,7 @@ class FireflyDLDriver: public rclcpp::Node
             camera_info_pub_ = image_transport::create_camera_publisher(this, camera_name_ + "/image_raw", custom_qos_profile);
 
             cinfo_manager_ = std::make_shared<camera_info_manager::CameraInfoManager>(this);
-            auto camera_calibration_file_param_ = this->declare_parameter("camera_calibration_file", "file://config/"+ camera_name_ + ".yaml");
+            auto camera_calibration_file_param_ = this->declare_parameter("camera_calibration_file", "file:///home/byeongkyu/config/"+ camera_name_ + ".yaml");
             cinfo_manager_->loadCameraInfo(camera_calibration_file_param_);
 
             camera_->Init();
@@ -97,6 +97,7 @@ class FireflyDLDriver: public rclcpp::Node
             }
 
             thread_camera_ = std::make_shared<std::thread>(std::bind(&FireflyDLDriver::thread_camera_func, this));
+            RCLCPP_INFO(this->get_logger(), "Initialized...");
         }
         ~FireflyDLDriver()
         {
@@ -187,6 +188,8 @@ class FireflyDLDriver: public rclcpp::Node
                 msg->header.frame_id = frame_id_;
 
                 sensor_msgs::msg::CameraInfo::SharedPtr camera_info_msg_(new sensor_msgs::msg::CameraInfo(cinfo_manager_->getCameraInfo()));
+                camera_info_msg_->header.stamp = msg->header.stamp;
+
                 camera_info_pub_.publish(msg, camera_info_msg_);
             }
         }
