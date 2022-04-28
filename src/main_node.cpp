@@ -80,6 +80,13 @@ class FireflyDLDriver: public rclcpp::Node
             Spinnaker::GenApi::CFloatPtr ptrBalanceRatio = camera_->GetNodeMap().GetNode("BalanceRatio");
             ptrBalanceRatio->SetValue(1.8);
 
+            Spinnaker::GenApi::CEnumerationPtr ptrExposureAuto = camera_->GetNodeMap().GetNode("ExposureAuto");
+            Spinnaker::GenApi::CEnumEntryPtr ptrExposureAutoOff = ptrExposureAuto->GetEntryByName("Off");
+            ptrExposureAuto->SetIntValue(ptrExposureAutoOff->GetValue());
+
+            Spinnaker::GenApi::CFloatPtr ptrExposureTime = camera_->GetNodeMap().GetNode("ExposureTime");
+            ptrExposureTime->SetValue(16000);
+
             try
             {
                 camera_->BeginAcquisition();
