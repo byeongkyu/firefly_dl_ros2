@@ -15,7 +15,6 @@
 #include <camera_info_manager/camera_info_manager.hpp>
 #include <image_transport/image_transport.hpp>
 
-
 class FireflyDLDriver: public rclcpp::Node
 {
     public:
@@ -46,7 +45,6 @@ class FireflyDLDriver: public rclcpp::Node
             camera_name_ = this->declare_parameter<std::string>("camera_name", "camera");
             frame_id_ = this->declare_parameter<std::string>("frame_id", "camera_link");
 
-
             // ROS2 related
             rmw_qos_profile_t custom_qos_profile = rmw_qos_profile_default;
             camera_info_pub_ = image_transport::create_camera_publisher(this, camera_name_ + "/image_raw", custom_qos_profile);
@@ -73,6 +71,14 @@ class FireflyDLDriver: public rclcpp::Node
             Spinnaker::GenApi::CFloatPtr ptrGain = camera_->GetNodeMap().GetNode("Gain");
             ptrGain->SetValue(2.0);
 
+            Spinnaker::GenApi::CEnumerationPtr ptrAcquisitionMode = camera_->GetNodeMap().GetNode("AcquisitionMode");
+            Spinnaker::GenApi::CEnumEntryPtr ptrAcquisitionModeValue = ptrAcquisitionMode->GetEntryByName("Continuous");
+            ptrAcquisitionMode->SetIntValue(ptrAcquisitionModeValue->GetValue());
+
+            Spinnaker::GenApi::CEnumerationPtr ptrStreamBufferHandlingMode = camera_->GetTLStreamNodeMap().GetNode("StreamBufferHandlingMode");
+            Spinnaker::GenApi::CEnumEntryPtr ptrStreamBufferHandlingModeValue = ptrStreamBufferHandlingMode->GetEntryByName("NewestOnly");
+            ptrStreamBufferHandlingMode->SetIntValue(ptrStreamBufferHandlingModeValue->GetValue());
+
             Spinnaker::GenApi::CEnumerationPtr ptrBalanceWhiteAuto = camera_->GetNodeMap().GetNode("BalanceWhiteAuto");
             Spinnaker::GenApi::CEnumEntryPtr ptrBalanceWhiteAutoOff = ptrBalanceWhiteAuto->GetEntryByName("Off");
             ptrBalanceWhiteAuto->SetIntValue(ptrBalanceWhiteAutoOff->GetValue());
@@ -87,6 +93,8 @@ class FireflyDLDriver: public rclcpp::Node
             Spinnaker::GenApi::CFloatPtr ptrExposureTime = camera_->GetNodeMap().GetNode("ExposureTime");
             ptrExposureTime->SetValue(16000);
 
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
             try
             {
                 camera_->BeginAcquisition();
@@ -95,23 +103,29 @@ class FireflyDLDriver: public rclcpp::Node
             {
                 throw std::runtime_error("[SpinnakerCamera::start] Failed to start capture with error: " + std::string(e.what()));
             }
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
+            enable_thread_ = true;
             thread_camera_ = std::make_shared<std::thread>(std::bind(&FireflyDLDriver::thread_camera_func, this));
+
             RCLCPP_INFO(this->get_logger(), "Initialized...");
         }
         ~FireflyDLDriver()
         {
+            enable_thread_ = false;
             camera_->EndAcquisition();
+
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            thread_camera_->join();
+            camera_->DeInit();
 
             system_->ReleaseInstance();
-            thread_camera_->join();
         }
 
     private:
         void thread_camera_func(void)
         {
-            while(rclcpp::ok())
+            while(rclcpp::ok() && enable_thread_)
             {
                 Spinnaker::ImagePtr image_ptr = camera_->GetNextImage();
                 Spinnaker::ImageStatus imageStatus = image_ptr->GetImageStatus();
@@ -119,11 +133,8 @@ class FireflyDLDriver: public rclcpp::Node
                 if(imageStatus != Spinnaker::IMAGE_NO_ERROR)
                     RCLCPP_WARN(this->get_logger(),  "Image Error");;
 
-                //?? image_ptr -> OpenCV Image
-                // image transport publish
 
                 sensor_msgs::msg::Image::SharedPtr msg(new sensor_msgs::msg::Image());
-
                 msg->header.stamp.sec = image_ptr->GetTimeStamp() * 1e-9;
                 msg->header.stamp.nanosec = image_ptr->GetTimeStamp();
 
@@ -243,6 +254,8 @@ class FireflyDLDriver: public rclcpp::Node
         int serial_num_;
         std::string camera_name_;
         std::string frame_id_;
+        bool enable_thread_;
+        rclcpp::TimerBase::SharedPtr timer_;
 };
 
 int main(int argc, char * argv[])
